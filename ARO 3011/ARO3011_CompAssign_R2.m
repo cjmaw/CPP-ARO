@@ -1,4 +1,10 @@
 clear; clc
+% ===============================
+% ----- Givens -----
+% ===============================
+Re = 1E6;
+nuAir = 1.46E-5;
+alpha = -7*pi/180; % radians
 
 % ===============================
 % ----- Import Airfoil Data -----
@@ -7,12 +13,14 @@ clear; clc
 airfoilData = open("AirfoilData.mat").dataValues;
 trailingEdge = [1.02,-0.0223];
 airfoilData = [airfoilData;trailingEdge];
+
+Vo = Re*nuAir/trailingEdge(1);
 %% =
 % ======================================
 % ----- Find Panel Boundary Points -----
 % ======================================
 
-N = 8; % Number of panels -- MUST BE AN EVEN NUMBER
+N = 128; % Number of panels -- MUST BE AN EVEN NUMBER
 TEx = trailingEdge(1); % X location of trailing edge
 
 
@@ -102,7 +110,7 @@ TEx = trailingEdge(1); % X location of trailing edge
 % ----- Find Panel Angles and Lengths -----
 % =========================================
 
-% Still going CW from TE
+% Still going CW from LE
 
 %   Make (x,y)|N+1 = (x,y)|1 so that point N can use it & complete loop
     xBoundary2 = xBoundary;
@@ -117,25 +125,87 @@ TEx = trailingEdge(1); % X location of trailing edge
 %   Loop to calculate angle of panel wrt x-axis and length of panel
     for i = 1:N
         theta(i) = atan2( (yBoundary2(i+1)-yBoundary2(i)) , (xBoundary2(i+1)-xBoundary2(i)) ); % radians
-            if theta(i) < 0     % Range of theta is 0 to 2pi
-                theta(i) = theta(i) + 2*pi;
-            end
+            % if theta(i) < 0     % Range of theta is 0 to 2pi
+            %     theta(i) = theta(i) + 2*pi;
+            % end
         panelLength(i) = sqrt( (yBoundary2(i+1)-yBoundary2(i))^2 + (xBoundary2(i+1)-xBoundary2(i))^2 ); 
     end
-
-
-
-
-
-% phi(i) = atan( (rControl(i+1,2)-rControl(i,2))/(rControl(i+1,1)-rControl(i,1)) ); % radians
-
 %%
-figure
-hold on
-scatter(airfoilData(:,1),airfoilData(:,2),'MarkerEdgeColor','#D4D4D4')
-ylim([-.25 .25])
-xlim([-0.1 1.15])
-scatter(xBoundary,yBoundary,'MarkerEdgeColor','r')
-scatter(xControl,yControl,'MarkerEdgeColor','#77AC30')
-hold off
-legend('Airfoil','Boundary Points','Control Points')
+% ================================
+% ----- Find r|ij and phi|ij -----
+% ================================
+
+%   Make (x,y)|N+1 = (x,y)|1 so that point N can use it & complete loop
+    xControl2 = xControl;
+    xControl2(N+1) = xControl(1);
+    yControl2 = yControl;
+    yControl2(N+1) = yControl(1);
+
+%   Pre-allocate matrices
+    r = zeros(N,N);
+    phi = zeros(N,N);
+
+%   For loop to calculate r|ij and phi|ij
+    for i = 1:N
+        for j = 1:N
+            r(i,j) = sqrt( (xControl2(j)-xControl2(i))^2 + (yControl2(j)-yControl2(i))^2 );
+            phi(i,j) = atan2( (yControl2(j)-yControl2(i)) , (xControl2(j)-xControl2(i)) );
+        end
+    end
+%%
+% =====================
+% ----- Compute q -----
+% =====================
+
+%   Pre-allocate matrix sizes
+    deltaS = zeros(N,1);
+    C = ones(N,N).*0.5;
+    Cbar = zeros(N,N);
+    B = zeros(N,1);
+
+%   Equations from Handout
+    for i = 1:N
+        for j = setdiff(1:N,i)    % j = 1:N but j =/= i
+            deltaS(j) = sqrt( (yBoundary2(j+1)-yBoundary2(j))^2 + (xBoundary2(j+1)-xBoundary2(j))^2 );
+            C(i,j) = deltaS(j) * sin(theta(i)-phi(i,j)) / (2*pi*r(i,j));
+            Cbar(i,j) = deltaS(j) * cos(theta(i)-phi(i,j)) / (2*pi*r(i,j));
+        end
+        B(i) = Vo*sin(theta(i)-alpha);
+    end
+
+q = C\B;
+%%
+% =================================
+% ----- Compute Vt, Cp, and CL-----
+% =================================
+
+%   Pre-allocate matrix sizes
+    Vt = zeros(N,1);
+    Cp = zeros(N,1);
+
+%   Equations from Handout
+    for i = 1:N
+        for j = 1:N
+            Vt(i) = Vo*cos(theta(i)-alpha) - Cbar(i,j)*q(i);
+            Cp(i) = 1 - (Vt(i)/Vo)^2;
+        end
+    end
+
+%   Compute CL
+    for i = 1:N/2
+        CL1(i) = -Cp(i)*deltaS(i)*cos(theta(i)-alpha);
+    end
+    for i = N/2+1:N
+        CL2(i) = Cp(i)*deltaS(i)*cos(theta(i)-alpha);
+    end
+    CL = sum(CL1)+sum(CL2);
+%%
+% figure
+% hold on
+% scatter(airfoilData(:,1),airfoilData(:,2),'MarkerEdgeColor','#D4D4D4')
+% ylim([-.25 .25])
+% xlim([-0.1 1.15])
+% scatter(xBoundary,yBoundary,'MarkerEdgeColor','r')
+% scatter(xControl,yControl,'MarkerEdgeColor','#77AC30')
+% hold off
+% legend('Airfoil','Boundary Points','Control Points')
