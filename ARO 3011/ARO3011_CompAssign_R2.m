@@ -174,7 +174,7 @@ q = C\B;
 
 % Compute CL
 Cp2 = Cp;
-Cp2(1:N/2) = -Cp2(1:N/2);
+Cp2(N/2+1:N) = -Cp2(N/2+1:N);
     for i = 1:N
         CL1(1) = Cp2(i)*deltaS(i)*cos(theta(i)-alpha);
     end
