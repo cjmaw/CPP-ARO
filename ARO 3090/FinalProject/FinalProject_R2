@@ -1,0 +1,90 @@
+% ARO 3090 FINAL PROJECT - APOPHIS MISSION
+% ------------- BY: CADEN MAW -------------
+clear; clc
+%%                           Givens
+
+muSun = 132712440041.279;                                                   % GM for Sun
+Isp = 323;                                                                  % Specific impulse of propulsion system
+
+%%          Read in Apophis and Earth Ephemeris Data
+
+load('Ephemeris_Apophis.mat');
+load('Ephemeris_Earth.mat');
+    % Time = 0 is Jan 1, 2028
+    % Time = end is Dec 31, 2029
+    % Time is in terms of days past Jan 1, 2000 (J2000)
+
+%%          Compute Times for Launch and Arrival in J2000
+
+N = 10;                                                                     % Number of indices to skip in loops
+                                                                            % 10 indices is 1 day
+
+% Launch Window:
+t_launch_start = 10320;                                                     % April 3, 2028 (10320 days)
+t_launch_end = 10390;                                                       % June 12, 2028 (10390 days)
+idx_launch_start = find(time==t_launch_start);                              % Index for start of launch window
+idx_launch_end = find(time==t_launch_end);                                  % Index for end of launch window
+
+
+% Arrival Window:
+t_arrival_start = 10600;                                                    % Jan 8, 2029 (10600)
+t_arrival_end = 10640;                                                      % Feb 17, 2029 (10640)
+idx_arrival_start = find(time==t_arrival_start);                            % Index for start of arrival window
+idx_arrival_end = find(time==t_arrival_end);                                % Index for end of arrival window
+
+%%          Compute DV Required for Rendezvous at Apophis
+
+
+for i = idx_launch_start : N : idx_launch_end
+    for j = idx_arrival_start : N : idx_arrival_end
+
+        t1 = time(i);                                                       % Time at launch
+        t2 = time(j);                                                       % Time at arrival
+        tof = (t2-t1)*86400;                                                % Time of flight in seconds
+
+        R1 = R_earth(:,i);                                                  % Location at t1 (relative to Sun)
+        R2 = R_apophis(:,j);                                                % Location at t2 (relative to Sun)
+
+        [V1,V2] = Lambert(R1,R2,tof,muSun);                                 % Compute required velocities at t1 and t2
+
+        Vinf_dep = mag(V1-V_earth(:,i));                                    % Speed of S/C relative to Earth at departure
+        Vinf_arr = mag(V2-V_apophis(:,j));                                  % Speed of S/C relative to Apophis at arrival
+        
+
+        a = ((i-idx_launch_start)/N)+1;                                     % Change launch indices to 1,2,3,4...
+        b = ((j-idx_arrival_start)/N)+1;                                    % Change arrival indices to 1,2,3,4...
+        
+        C3(a,b) = Vinf_dep^2;                                               % Provided by launch vehicle
+        DV_rend(a,b) = Vinf_arr;                                            % Provided by S/C
+        
+        % DV_total(a,b) = Vinf_dep+Vinf_arr;
+    end
+end
+
+%%             Determine Mission Design Solution
+
+% Minimum DV and C3
+minDV = min(DV_rend,[],"all");                                              % Compute minimum DV for rendezvous
+[row,col] = find(DV_rend==minDV);                                           % Find location of min DV in matrix
+C3_required = C3(row,col);                                                  % Find associated C3 for min DV
+
+    best_t1_idx = (N*(row-1))+idx_launch_start;                             % Convert 1,2,3,4... indices back to originals
+    best_t2_idx = (N*(col-1))+idx_arrival_start;
+
+    best_t1 = time(best_t1_idx);                                            % April 27, 2028 to launch
+    best_t2 = time(best_t2_idx);                                            % February 17, 2029 to arrive
+
+fprintf('Minimum DV is %.4g km/s.\n',minDV)
+fprintf('Launch on April 27, 2028. J2000 = %.6g.\n',best_t1)
+fprintf('Arrive on February 17, 2029. J2000 = %.6g.\n',best_t2)
+fprintf('Time of flight is %.5g days.\n',best_t2-best_t1)
+
+% Propellant Mass:
+K1=-0.0499807406962502; K2=-234.309629614927; K3=7124.93620791751;          % Constants for New Glenn performance
+mw = K1*C3_required^2 + K2*C3_required + K3;Dv = minDV*1000;                % S/C Wet Mass
+md = mw/exp(Dv/(Isp*9.81));                                                 % S/C Dry Mass
+mp = mw-md;                                                                 % S/C Propellant Mass
+
+fprintf('Requires C3 of %.4g km^2/s^2.\n',C3_required)
+fprintf('The dry mass that can go to Apophis is %.4g kg.\n',md)
+fprintf('Propellant Mass is %.4g kg.\n',mp)
