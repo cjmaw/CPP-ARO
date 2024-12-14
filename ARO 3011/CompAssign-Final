@@ -1,0 +1,150 @@
+%% ===== Givens =====
+N = 128;                                                                    % Number of panels -- MUST BE AN EVEN NUMBER
+alpha = -3*pi/180;                                                          % Angle of attack in radians
+Vo = 1;                                                                     % Free stream velocity
+
+
+%% ===== Import Airfoil Data =====
+
+airfoilData = open("AirfoilData.mat").dataValues;
+leadingEdge = [0,0];                                                        % Add LE point at origin 
+trailingEdge = [1.02,-0.0223];                                              % Add TE extension point
+TEx = trailingEdge(1);                                                      % X location of trailing edge
+
+
+%% ===== Find Panel Boundary Points =====
+
+%   ---- Upper Surface ----
+    upperSurface = airfoilData(1:102,:);
+    upperSurface = [leadingEdge;upperSurface;trailingEdge];
+
+    x = upperSurface(:,1);
+    y = upperSurface(:,2);
+    xBoundaryUpper = linspace(0,TEx,N/2+1);                                 % X location of boundary points
+    yBoundaryUpper = interp1(x,y,xBoundaryUpper);                           % Linear interpolation wrt x
+
+
+%   ---- Lower Surface ----
+    lowerSurface = airfoilData(103:end,:);
+    lowerSurface = [lowerSurface;trailingEdge];
+
+    x = lowerSurface(:,1);
+    y = lowerSurface(:,2);
+    xBoundaryLower = linspace(0,TEx,N/2+1);                                 % X location of boundary points
+    yBoundaryLower = interp1(x,y,xBoundaryLower);                           % Linear interpolation wrt x
+
+
+%% ===== Define Boundary and Control Points: CW from LE =====
+                                                                            % Set up to go CCW from TE, then flip
+%   ---- Boundary Points ----                                                                  
+    xBoundaryUpper2 = fliplr(xBoundaryUpper);                               % Upper Surface goes CW from LE - need to flip
+    yBoundaryUpper2 = fliplr(yBoundaryUpper);                               % Lower Surface already goes CCW from TE
+                                                   
+    xBoundaryUpper2(end) = [];                                              % Remove Duplicate Point at LE
+    yBoundaryUpper2(end) = [];                                              % Keep Duplicate Point at TE for Complete Loop
+    
+    xBoundary = [xBoundaryUpper2';xBoundaryLower'];                         % Concatenate w/ Upper first to go CCW from TE
+    yBoundary = [yBoundaryUpper2';yBoundaryLower'];
+
+
+%   ---- Control Points ----
+    zeta = zeros(N,1);                                                      % zeta = x location of control point                                           
+    eta = zeros(N,1);                                                       % eta = y location of control point
+
+    for i = 1:N
+        zeta(i) = (xBoundary(i) + xBoundary(i+1))/2;                        % Each control point is halfway between the neighboring boundary points
+        eta(i) = (yBoundary(i) + yBoundary(i+1))/2;
+    end
+
+
+%   ---- Flip to run CW from TE ----
+    zeta = flip(zeta);
+    eta = flip(eta);
+    xBoundary = flip(xBoundary);
+    yBoundary = flip(yBoundary);
+
+
+%% ===== Compute theta, r, phi =====
+   
+    theta = zeros(1,N);                                                     % Angle of each panel wrt positive x-axis (radians)
+    r = zeros(N,N);                                                         % Distance from each control point to all other control points
+    phi = zeros(N,N);                                                       % Angle from each control point to all other control points (radians)
+    
+    for i = 1:N
+        theta(i) = atan2( (yBoundary(i+1)-yBoundary(i)) , (xBoundary(i+1)-xBoundary(i)) ); 
+        for j = 1:N
+            r(i,j) = sqrt( (zeta(j)-zeta(i))^2 + (eta(j)-eta(i))^2 );
+            phi(i,j) = atan2( (eta(j)-eta(i)) , (zeta(j)-zeta(i)) );
+        end
+    end
+
+
+%% ===== Compute q =====
+
+    S = zeros(N,1);                                                         % Length of each panel
+    C = ones(N,N).*0.5;                                                     % Influence coefficient C - will keep 0.5 on diagonal
+    Cbar = zeros(N,N);                                                      % Influence coefficient Cbar
+    VoSinMat = zeros(N,1);                                                  % Array of Vo*sin(theta(i)-alpha) terms
+
+
+%   ---- Compute S ----
+    for j = 1:N
+        S(j) = sqrt( (yBoundary(j+1)-yBoundary(j))^2 + (xBoundary(j+1)-xBoundary(j))^2 );
+    end
+
+
+%   ---- Compute C, Cbar, B ----
+    for i = 1:N
+        for j = setdiff(1:N,i)                                              % j = 1:N but j =/= i
+            C(i,j) = S(j) * sin(theta(i)-phi(i,j)) / (2*pi*r(i,j));
+            Cbar(i,j) = S(j) * cos(theta(i)-phi(i,j)) / (2*pi*r(i,j));
+        end
+        VoSinMat(i) = Vo*sin(theta(i)-alpha);
+    end
+
+
+%   ---- Compute q ----
+    q = C\VoSinMat;                                                         % Strength of each panel
+
+
+%% ===== Compute Vt, Cp, and Cl =====
+
+    Cp = zeros(N,1);                                                        % Coefficient of pressure for each panel
+    VoCosMat = zeros(N,1);                                                  % Array of Vo*cos(theta(i)-alpha) terms
+
+
+%   ---- Compute Vt ----
+    for i = 1:N
+        VoCosMat(i) = Vo*cos(theta(i)-alpha);
+    end
+    
+    Vt = VoCosMat - Cbar*q;                                                 % Velocity tangent to each panel
+
+
+%   ---- Compute Cp ----
+    for i = 1:N
+        Cp(i) = 1 - (Vt(i)/Vo)^2;                                           % Pressure coefficient of each panel
+    end
+
+
+%   ---- Compute Cl ----
+
+    % Separate upper and lower surfaces
+    Cp_upper = Cp(N/2+1:N);                                                 % Cp's of upper panels
+    S_upper = S(N/2+1:N);                                                   % Lengths of upper panels
+    theta_upper = theta(N/2+1:N);                                           % Angles of upper panels
+
+    Cp_lower = Cp(1:N/2);                                                   % Cp's of lower panels
+    S_lower = S(1:N/2);                                                     % Lengths of lower panels
+    theta_lower = theta(1:N/2);                                             % Angles of lower panels
+
+    % Compute CL
+    for i = 1:N/2
+        CL1(i) = -Cp_upper(i)*S_upper(i)*cos(theta_upper(i)-alpha);         % Note that upper Cp's have negative sign
+    end
+
+    for i = 1:N/2
+        CL2(i) = -Cp_lower(i)*S_lower(i)*cos(theta_lower(i)-alpha);          % Note that lower Cp's have negative sign too
+    end
+
+CL = sum(CL1) + sum(CL2);                                                   % Airfoil's lift coefficient
