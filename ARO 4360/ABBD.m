@@ -1,4 +1,4 @@
-function ABBD (t,theta,QbarList)
+function [ABBDmat] = ABBD2 (t,theta,QbarList)
 % Takes column vectors for t = lamina thicknesses (inches), theta = ply
 % angles (degrees), and concatenated Qbar matrices (Msi) for laminate to
 % compute ABBD matrix (ksi). 
@@ -7,45 +7,40 @@ function ABBD (t,theta,QbarList)
 % Author: Cade Maw
 % Date: 2/17/25
 
+fprintf('\n<strong>--- COMPUTE ABBD MATRIX ---</strong>\n\n')
 
 N = numel(t); % number of layers
 
-% Reorganize Qbar's from a 3x(3*N) matrix to a 3x3xN matrix
-QbarLaminate = zeros(3,3,N);
-for k = 1:N
-    QbarLaminate(1:3,1:3,k) = QbarList(k*3-2:k*3,:);
-end
 
-
-% Display inputs
-fprintf('\n<strong>INPUTS:</strong>\n\n')
-
-% Thicknesses
-fprintf('Thicknesses (inches):\n')
-for i = 1:N
-    fprintf('{ t_%2.0f } = { %5.4f }\n',i,t(i))
-end
-fprintf('\n')
-
-% Ply Angles
-fprintf('Ply Angles (degrees):\n')
-for i = 1:N
-    fprintf('{ theta_%2.0f } = { %6.1f }\n',i,theta(i))
-end
-fprintf('\n')
-
-% Qbar's
-fprintf('Qbar Matrices for Each Ply:\n')
-for i = 1:N
-    symb = strcat('Qbar_',num2str(theta(i)));
-    Pretty3x3(QbarList(i*3-2:i*3,:),symb,'Msi');
-end
+% % Display inputs
+% fprintf('\n<strong>INPUTS:</strong>\n\n')
+% 
+% % Thicknesses
+% fprintf('Thicknesses (inches):\n')
+% for i = 1:N
+%     fprintf('{ t_%2.0f } = { %5.4f }\n',i,t(i))
+% end
+% fprintf('\n')
+% 
+% % Ply Angles
+% fprintf('Ply Angles (degrees):\n')
+% for i = 1:N
+%     fprintf('{ theta_%2.0f } = { %6.1f }\n',i,theta(i))
+% end
+% fprintf('\n')
+% 
+% % Qbar's
+% fprintf('Qbar Matrices for Each Ply:\n')
+% for i = 1:N
+%     symb = strcat('Qbar_',num2str(theta(i)));
+%     Pretty3x3(QbarList(i*3-2:i*3,:),symb,'Msi');
+% end
 
 
 %% Compute z's and zbar's
 tLam = sum(t);
 
-z = zeros(N,1);
+z = zeros(N+1,1);
 z(1) = -tLam/2; % z0 in CSHv1
 z(2) = -tLam/2 + t(1); %z1 in CSHv1, etc.
 for i = 3:N+1
@@ -60,31 +55,27 @@ end
 
 
 %% Compute A,B,D matrices
-for i = 1:3
-    for j = 1:3
-        for k = 1:N
-            tempA(i,j,k) = QbarLaminate(i,j,k)*t(k);
-            tempB(i,j,k) = QbarLaminate(i,j,k)*t(k)*zbar(k);
-            tempD(i,j,k) = QbarLaminate(i,j,k) * (t(k)*zbar(k)^2 + (1/12)*t(k)^3);
-        end
-        A(i,j) = sum(tempA(i,j,:));
-        B(i,j) = sum(tempB(i,j,:));
-        D(i,j) = sum(tempD(i,j,:));
-    end
+A = zeros(3,3);
+B = zeros(3,3);
+D = zeros(3,3);
+for i = 1:N
+    A = A + QbarList(3*i-2:3*i,1:3)*t(i);
+    B = B + QbarList(3*i-2:3*i,1:3)*t(i)*zbar(i);
+    D = D + QbarList(3*i-2:3*i,1:3)*(t(i)*zbar(i)^2 + (1/12)*t(i)^3);
 end
 
 
 %% Combine to get ABBD
-ABBDmat = [A,B;B,D].*1000; % ksi, assuming Qbars are in Msi
+ABBDmat = [A,B;B,D].*1000; % kips/in, kips, and in-kips, assuming Qbars are in Msi
 
 fprintf('\n<strong>RESULTS:</strong>\n\n')
-for i = 1:N
-    if i ~= floor(N/2)
+fprintf('Units: kips/in, kips, and in-kips\n')
+for i = 1:6
+    if i ~= 3
         fprintf('             [ %7.3f  %7.3f  %7.3f  %7.3f  %7.3f  %7.3f ]\n',ABBDmat(i,1),ABBDmat(i,2),ABBDmat(i,3),ABBDmat(i,4),ABBDmat(i,5),ABBDmat(i,6))
-    elseif i == floor(N/2)
+    elseif i == 3
         fprintf('[ ABBD ]  =  ')
-        fprintf('[ %7.3f  %7.3f  %7.3f  %7.3f  %7.3f  %7.3f ]',ABBDmat(i,1),ABBDmat(i,2),ABBDmat(i,3),ABBDmat(i,4),ABBDmat(i,5),ABBDmat(i,6))
-        fprintf(' ksi\n')
+        fprintf('[ %7.3f  %7.3f  %7.3f  %7.3f  %7.3f  %7.3f ]\n',ABBDmat(i,1),ABBDmat(i,2),ABBDmat(i,3),ABBDmat(i,4),ABBDmat(i,5),ABBDmat(i,6))
     end
 end
 
