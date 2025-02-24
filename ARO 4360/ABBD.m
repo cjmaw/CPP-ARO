@@ -1,4 +1,4 @@
-function [ABBDmat] = ABBD2 (t,theta,QbarList)
+function [ABBDmat] = ABBD (t,theta,QbarList)
 % Takes column vectors for t = lamina thicknesses (inches), theta = ply
 % angles (degrees), and concatenated Qbar matrices (Msi) for laminate to
 % compute ABBD matrix (ksi). 
@@ -12,29 +12,29 @@ fprintf('\n<strong>--- COMPUTE ABBD MATRIX ---</strong>\n\n')
 N = numel(t); % number of layers
 
 
-% % Display inputs
-% fprintf('\n<strong>INPUTS:</strong>\n\n')
-% 
-% % Thicknesses
-% fprintf('Thicknesses (inches):\n')
-% for i = 1:N
-%     fprintf('{ t_%2.0f } = { %5.4f }\n',i,t(i))
-% end
-% fprintf('\n')
-% 
-% % Ply Angles
-% fprintf('Ply Angles (degrees):\n')
-% for i = 1:N
-%     fprintf('{ theta_%2.0f } = { %6.1f }\n',i,theta(i))
-% end
-% fprintf('\n')
-% 
-% % Qbar's
-% fprintf('Qbar Matrices for Each Ply:\n')
-% for i = 1:N
-%     symb = strcat('Qbar_',num2str(theta(i)));
-%     Pretty3x3(QbarList(i*3-2:i*3,:),symb,'Msi');
-% end
+% Display inputs
+fprintf('\n<strong>INPUTS:</strong>\n\n')
+
+% Thicknesses
+fprintf('Thicknesses (inches):\n')
+for i = 1:N
+    fprintf('{ t_%2.0f } = { %5.4f }\n',i,t(i))
+end
+fprintf('\n')
+
+% Ply Angles
+fprintf('Ply Angles (degrees):\n')
+for i = 1:N
+    fprintf('{ theta_%2.0f } = { %6.1f }\n',i,theta(i))
+end
+fprintf('\n')
+
+% Qbar's
+fprintf('Qbar Matrices for Each Ply:\n')
+for i = 1:N
+    symb = strcat('Qbar_',num2str(theta(i)));
+    Pretty3x3(QbarList(i*3-2:i*3,:),symb,'Msi');
+end
 
 
 %% Compute z's and zbar's
